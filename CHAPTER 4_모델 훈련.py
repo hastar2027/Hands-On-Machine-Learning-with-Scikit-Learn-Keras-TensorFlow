@@ -69,3 +69,83 @@ m = 100
 X = 6 * np.random.rand(m, 1) - 3
 y = 0.5 * X**2 + X + 2 + np.random.randn(m, 1)
 
+# 학습 곡선 #
+# 주어진 훈련 데이터에서 모델의 학습 곡선 그리는 함수 정의
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
+
+def plot_learning_curves(model, X, y):
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=10)
+    train_errors, val_errors = [], []
+    for m in range(1, len(X_train) + 1):
+        model.fit(X_train[:m], y_train[:m])
+        y_train_predict = model.predict(X_train[:m])
+        y_val_predict = model.predict(X_val)
+        train_errors.append(mean_squared_error(y_train[:m], y_train_predict))
+        val_errors.append(mean_squared_error(y_val, y_val_predict))
+    plt.plot(np.sqrt(train_errors), "r-+", linewidth=2, label="train")
+    plt.plot(np.sqrt(val_errors), "b-", linewidth=3, label="val")
+
+# 단순 선형 회귀 모델의 학습 곡선
+lin_reg = LinearRegression()
+plot_learning_curves(lin_reg, X, y)
+
+# 같은 데이터에서 10차 다항 회귀 모델의 학습 곡선 표현
+from sklearn.pipeline import Pipeline
+
+polynomial_regression = Pipeline([
+        ("poly_features", PolynomialFeatures(degree=10, include_bias=False)),
+        ("lin_reg", LinearRegression()),
+    ])
+
+plot_learning_curves(polynomial_regression, X, y)
+
+# 규제가 있는 선형 모델 #
+# 조기 종료 #
+# 조기 종료를 위한 기본적인 구현 코드
+from copy import deepcopy
+
+poly_scaler = Pipeline([
+        ("poly_features", PolynomialFeatures(degree=90, include_bias=False)),
+        ("std_scaler", StandardScaler())
+    ])
+
+X_train_poly_scaled = poly_scaler.fit_transform(X_train)
+X_val_poly_scaled = poly_scaler.transform(X_val)
+
+sgd_reg = SGDRegressor(max_iter=1, tol=-np.infty, warm_start=True,
+                       penalty=None, learning_rate="constant", eta0=0.0005, random_state=42)
+
+minimum_val_error = float("inf")
+best_epoch = None
+best_model = None
+for epoch in range(1000):
+    sgd_reg.fit(X_train_poly_scaled, y_train)  # continues where it left off
+    y_val_predict = sgd_reg.predict(X_val_poly_scaled)
+    val_error = mean_squared_error(y_val, y_val_predict)
+    if val_error < minimum_val_error:
+        minimum_val_error = val_error
+        best_epoch = epoch
+        best_model = deepcopy(sgd_reg)
+        
+# 로지스틱 회귀 #
+# 결정 경계 #
+# 로지스틱 회귀 모델 훈련
+from sklearn.linear_model import LogisticRegression
+log_reg = LogisticRegression(solver="lbfgs", random_state=42)
+log_reg.fit(X, y)
+
+# 꽃잎의 너비가 0~3cm인 꽃에 대해 모델의 추정 확률 계산
+X_new = np.linspace(0, 3, 1000).reshape(-1, 1)
+y_proba = log_reg.predict_proba(X_new)
+
+plt.plot(X_new, y_proba[:, 1], "g-", linewidth=2, label="Iris virginica")
+plt.plot(X_new, y_proba[:, 0], "b--", linewidth=2, label="Not Iris virginica")
+
+# 소프트맥스 회귀 #
+# 소프트맥스 회귀 사용해 붓꽃을 세 개의 클래스로 분류
+X = iris["data"][:, (2, 3)]  # petal length, petal width
+y = iris["target"]
+
+softmax_reg = LogisticRegression(multi_class="multinomial",solver="lbfgs", C=10, random_state=42)
+softmax_reg.fit(X, y)
